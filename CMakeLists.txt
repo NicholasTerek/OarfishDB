@@ -18,6 +18,7 @@ include(FetchContent)
 FetchContent_Declare(
   googletest
   URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
 # Safe on Linux; keeps gtest from trying to do MSVC CRT stuff if you ever build on Windows
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
