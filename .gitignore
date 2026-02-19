@@ -1,6 +1,7 @@
 # Prerequisites
 *.d
-
+*.zed
+compile_commands.json
 # Compiled Object files
 *.slo
 *.lo
