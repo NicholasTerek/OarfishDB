@@ -58,6 +58,13 @@ bool LsmIterator::is_valid() {
     return true;
 }
 
+int LsmIterator::num_active_iterators() {
+    if (!LsmIteratorInner_) {
+        return 0;
+    }
+    return LsmIteratorInner_->num_active_iterators();
+}
+
 void LsmIterator::next() {
     if (!LsmIteratorInner_->is_valid() || ended_) {
         return;
@@ -108,6 +115,13 @@ bool FusedIterator::is_valid() {
         return false;
     }
     return inner_->is_valid();
+}
+
+int FusedIterator::num_active_iterators() {
+    if (has_errored_ || !inner_) {
+        return 0;
+    }
+    return inner_->num_active_iterators();
 }
 
 void FusedIterator::next() {

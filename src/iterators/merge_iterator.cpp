@@ -47,6 +47,16 @@ bool MergeIterator::is_valid() {
     return current_->iterator->is_valid();
 }
 
+int MergeIterator::num_active_iterators() {
+    int total = 0;
+    for (const auto& it : owned_iters_) {
+        if (it) {
+            total += it->num_active_iterators();
+        }
+    }
+    return total;
+}
+
 void MergeIterator::next() {
     if (!current_ || !current_->iterator) {
         return;

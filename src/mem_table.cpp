@@ -43,6 +43,16 @@ bool MemTable::put(std::string key, std::string value){
     return true;
 }
 
+SsTable MemTable::flush(const std::string& file_path, std::uint32_t block_size) const {
+    SsTableBuilder builder(block_size);
+    auto iter = begin();
+    while (iter.is_valid()) {
+        builder.add(iter.key(), iter.value());
+        iter.next();
+    }
+    return builder.build_for_test(file_path);
+}
+
 // MemTableIterator constructors
 MemTable::MemTableIterator::MemTableIterator() 
     : current_node_(nullptr) {}
@@ -61,6 +71,10 @@ std::string MemTable::MemTableIterator::value() {
 
 bool MemTable::MemTableIterator::is_valid() {
     return current_node_ != nullptr;
+}
+
+int MemTable::MemTableIterator::num_active_iterators() {
+    return 1;
 }
 
 void MemTable::MemTableIterator::next() {

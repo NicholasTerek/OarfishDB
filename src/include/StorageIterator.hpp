@@ -15,4 +15,5 @@ public:
     virtual std::string value()= 0;
     virtual bool is_valid() = 0;
     virtual void next() = 0;
+    virtual int num_active_iterators() = 0;
 };

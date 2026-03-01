@@ -73,6 +73,10 @@ bool BlockIterator::is_valid() {
     return valid_;
 }
 
+int BlockIterator::num_active_iterators() {
+    return 1;
+}
+
 void BlockIterator::next() {
     if (!valid_) {
         return;

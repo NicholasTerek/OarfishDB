@@ -49,9 +49,10 @@ public:
     
     // StorageIterator interface
     std::string key() override;
-    std::string value() override; 
+    std::string value() override;
     bool is_valid() override;
     void next() override;
+    int num_active_iterators() override;
     
     ~MergeIterator() { delete current_; }
 

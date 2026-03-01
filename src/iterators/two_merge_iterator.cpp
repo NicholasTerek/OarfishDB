@@ -33,6 +33,17 @@ bool TwoMergeIterator::is_valid() {
     return (first_ && first_->is_valid()) || (second_ && second_->is_valid());
 }
 
+int TwoMergeIterator::num_active_iterators() {
+    int total = 0;
+    if (first_) {
+        total += first_->num_active_iterators();
+    }
+    if (second_) {
+        total += second_->num_active_iterators();
+    }
+    return total;
+}
+
 void TwoMergeIterator::next() {
     if (!is_valid()) {
         return;

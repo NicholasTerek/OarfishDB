@@ -1,6 +1,44 @@
 #include "src/include/lsm_storage.hpp"
 #include <gtest/gtest.h>
-#include <iostream>
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
+#include <filesystem>
+#include <memory>
+#include <string>
+#include <thread>
+#include <utility>
+#include <vector>
+
+namespace {
+
+std::filesystem::path make_temp_dir() {
+    auto base = std::filesystem::temp_directory_path();
+    auto dir = base / ("lsm_storage_test_" + std::to_string(std::rand()));
+    std::filesystem::create_directory(dir);
+    return dir;
+}
+
+void sync_flush(const std::shared_ptr<LsmStorageInner>& storage) {
+    storage->force_freeze_memtable();
+    while (storage->force_flush_next_imm_memtable()) {}
+}
+
+void check_lsm_iter_result_by_key(FusedIterator* iter,
+                                  const std::vector<std::pair<std::string, std::string>>& expected) {
+    std::vector<std::pair<std::string, std::string>> actual;
+    while (iter->is_valid()) {
+        actual.push_back({iter->key(), iter->value()});
+        iter->next();
+    }
+    ASSERT_EQ(actual.size(), expected.size());
+    for (size_t i = 0; i < expected.size(); ++i) {
+        EXPECT_EQ(actual[i].first, expected[i].first);
+        EXPECT_EQ(actual[i].second, expected[i].second);
+    }
+}
+
+} // namespace
 
 TEST(LsmStorageTest, StorageIntegration) {
     LsmStorageInner storage;
@@ -216,4 +254,125 @@ TEST(LsmStorageTest, StorageIntegrationOfficial) {
     EXPECT_FALSE(storage.get("2").has_value());      // Deleted in middle memtable, no newer version
     EXPECT_EQ(storage.get("3").value(), "233333");   // Latest from current memtable
     EXPECT_EQ(storage.get("4").value(), "23333");    // From middle memtable
+}
+
+TEST(LsmStorageTest, FlushReadPathScan) {
+    auto dir = make_temp_dir();
+    auto storage = LsmStorageInner::open(dir.string(), LsmStorageOptions::default_for_week1_test());
+    storage->put("0", "2333333");
+    storage->put("00", "2333333");
+    storage->put("4", "23");
+    sync_flush(storage);
+
+    storage->delete_key("4");
+    sync_flush(storage);
+
+    storage->put("1", "233");
+    storage->put("2", "2333");
+    storage->force_freeze_memtable();
+    storage->put("00", "2333");
+    storage->force_freeze_memtable();
+    storage->put("3", "23333");
+    storage->delete_key("1");
+
+    EXPECT_EQ(storage->get_l0_sstables_count(), 2);
+    EXPECT_EQ(storage->get_imm_memtables_count(), 2);
+
+    {
+        auto iter = storage->scan(Bound::unbounded(), Bound::unbounded());
+        check_lsm_iter_result_by_key(iter.get(), {
+            {"0", "2333333"},
+            {"00", "2333"},
+            {"2", "2333"},
+            {"3", "23333"},
+        });
+    }
+    {
+        auto iter = storage->scan(Bound::included("1"), Bound::included("2"));
+        check_lsm_iter_result_by_key(iter.get(), {{"2", "2333"}});
+    }
+    {
+        auto iter = storage->scan(Bound::excluded("1"), Bound::excluded("3"));
+        check_lsm_iter_result_by_key(iter.get(), {{"2", "2333"}});
+    }
+}
+
+TEST(LsmStorageTest, FlushReadPathGet) {
+    auto dir = make_temp_dir();
+    auto storage = LsmStorageInner::open(dir.string(), LsmStorageOptions::default_for_week1_test());
+    storage->put("0", "2333333");
+    storage->put("00", "2333333");
+    storage->put("4", "23");
+    sync_flush(storage);
+
+    storage->delete_key("4");
+    sync_flush(storage);
+
+    storage->put("1", "233");
+    storage->put("2", "2333");
+    storage->force_freeze_memtable();
+    storage->put("00", "2333");
+    storage->force_freeze_memtable();
+    storage->put("3", "23333");
+    storage->delete_key("1");
+
+    EXPECT_EQ(storage->get_l0_sstables_count(), 2);
+    EXPECT_EQ(storage->get_imm_memtables_count(), 2);
+
+    EXPECT_EQ(storage->get("0").value(), "2333333");
+    EXPECT_EQ(storage->get("00").value(), "2333");
+    EXPECT_EQ(storage->get("2").value(), "2333");
+    EXPECT_EQ(storage->get("3").value(), "23333");
+    EXPECT_FALSE(storage->get("4").has_value());
+    EXPECT_FALSE(storage->get("--").has_value());
+    EXPECT_FALSE(storage->get("555").has_value());
+}
+
+TEST(LsmStorageTest, AutoFlush) {
+    auto dir = make_temp_dir();
+    auto storage = Lsm::open(dir.string(), LsmStorageOptions::default_for_week1_day6_test());
+
+    std::string value(1024, '1');
+    for (int i = 0; i < 6000; ++i) {
+        storage->put(std::to_string(i), value);
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    EXPECT_GT(storage->get_l0_sstables_count(), 0);
+    storage->close();
+}
+
+TEST(LsmStorageTest, SstFilter) {
+    auto dir = make_temp_dir();
+    auto storage = LsmStorageInner::open(dir.string(), LsmStorageOptions::default_for_week1_test());
+
+    for (int i = 1; i <= 10000; ++i) {
+        if (i % 1000 == 0) {
+            sync_flush(storage);
+        }
+        char buf[16];
+        std::snprintf(buf, sizeof(buf), "%05d", i);
+        storage->put(buf, "2333333");
+    }
+
+    auto iter_all = storage->scan(Bound::unbounded(), Bound::unbounded());
+    int max_num = iter_all->num_active_iterators();
+    EXPECT_GE(max_num, 10);
+
+    auto iter_1 = storage->scan(Bound::excluded("10000"), Bound::unbounded());
+    EXPECT_LT(iter_1->num_active_iterators(), max_num);
+    int min_num = iter_1->num_active_iterators();
+
+    auto iter_2 = storage->scan(Bound::unbounded(), Bound::excluded("00001"));
+    EXPECT_EQ(iter_2->num_active_iterators(), min_num);
+
+    auto iter_3 = storage->scan(Bound::unbounded(), Bound::included("00000"));
+    EXPECT_EQ(iter_3->num_active_iterators(), min_num);
+
+    auto iter_4 = storage->scan(Bound::included("10001"), Bound::unbounded());
+    EXPECT_EQ(iter_4->num_active_iterators(), min_num);
+
+    auto iter_5 = storage->scan(Bound::included("05000"), Bound::excluded("06000"));
+    int mid = iter_5->num_active_iterators();
+    EXPECT_TRUE(min_num <= mid && mid < max_num);
 }

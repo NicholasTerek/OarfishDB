@@ -163,6 +163,10 @@ bool SkipList::SkipListIterator::is_valid(){
     return current_ != nullptr;
 }
 
+int SkipList::SkipListIterator::num_active_iterators() {
+    return 1;
+}
+
 void SkipList::SkipListIterator::next(){
     current_= current_->next[0];
 }

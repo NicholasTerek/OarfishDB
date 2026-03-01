@@ -127,6 +127,7 @@ public:
          * @return true if iterator is valid, false if at end
          */
         bool is_valid() override;
+        int num_active_iterators() override;
         
         /**
          * Move iterator to next node in sorted order

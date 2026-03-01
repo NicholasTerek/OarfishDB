@@ -26,6 +26,10 @@ public:
         return current_index_ < data_.size();
     }
 
+    int num_active_iterators() override {
+        return 1;
+    }
+
     void next() override {
         if (current_index_ < data_.size()) {
             current_index_++;

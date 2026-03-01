@@ -38,6 +38,10 @@ public:
         return current_index_ < data_.size();
     }
 
+    int num_active_iterators() override {
+        return 1;
+    }
+
     void next() override {
         if (has_error_ && current_index_ == error_at_index_) {
             // Simulate error by becoming invalid

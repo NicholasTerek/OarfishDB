@@ -16,6 +16,7 @@ public:
     std::string value() override;
     bool is_valid() override;
     void next() override;
+    int num_active_iterators() override;
 
 private:
     std::unique_ptr<StorageIterator> first_;

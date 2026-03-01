@@ -36,6 +36,10 @@ bool SsTableIterator::is_valid() {
     return valid_;
 }
 
+int SsTableIterator::num_active_iterators() {
+    return 1;
+}
+
 void SsTableIterator::next() {
     if (!valid_ || !block_iter_) {
         return;

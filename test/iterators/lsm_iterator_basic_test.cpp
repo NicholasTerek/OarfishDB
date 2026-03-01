@@ -18,6 +18,7 @@ public:
     std::string key() override { return is_valid() ? data_[index_].first : ""; }
     std::string value() override { return is_valid() ? data_[index_].second : ""; }
     bool is_valid() override { return index_ < data_.size(); }
+    int num_active_iterators() override { return 1; }
     void next() override { if (index_ < data_.size()) { ++index_; } }
 
 private:

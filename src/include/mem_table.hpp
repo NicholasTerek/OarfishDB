@@ -1,6 +1,8 @@
 #include "src/include/iterators/StorageIterator.hpp"
 #include "src/include/data_structures/skiplist.hpp"
+#include "src/include/sst/sstable.hpp"
 #include <atomic>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <memory>
@@ -17,6 +19,7 @@ public:
 
     std::optional<std::string> get(std::string key);
     bool put(std::string key, std::string value);
+    SsTable flush(const std::string& file_path, std::uint32_t block_size) const;
 
     class MemTableIterator : public StorageIterator {
     public:
@@ -27,6 +30,7 @@ public:
         std::string value() override;
         bool is_valid() override;
         void next() override;
+        int num_active_iterators() override;
 
     private:
         SkipList::Node* current_node_;

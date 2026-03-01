@@ -20,6 +20,7 @@ public:
     std::string value() override;
     bool is_valid() override;
     void next() override;
+    int num_active_iterators() override;
 
     void seek_to_first();
     void seek_to_key(const std::string& key);
