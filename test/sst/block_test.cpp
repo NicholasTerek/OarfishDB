@@ -3,7 +3,6 @@
 #include <cstdio>
 #include <memory>
 #include <string>
-#include <vector>
 
 #include "src/include/sst/block.hpp"
 #include "src/include/iterators/block_iterator.hpp"
