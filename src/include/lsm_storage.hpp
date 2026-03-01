@@ -1,11 +1,14 @@
 #pragma once
 #include "mem_table.hpp"
+#include "src/include/iterators/bound.hpp"
 #include "src/include/iterators/lsm_iterator.hpp"
+#include "src/include/sst/sstable.hpp"
 #include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 #include <mutex>
+#include <unordered_map>
 
 // Represents the state of the storage engine
 class LsmStorageState {
@@ -16,8 +19,18 @@ public:
     MemTable* memtable;
     
     std::vector<MemTable*> imm_memtables;
+
+    std::vector<int> l0_sstables;
+    std::unordered_map<int, std::shared_ptr<SsTable>> sstables;
     
     static LsmStorageState create();
+};
+
+struct LsmStorageSnapshot {
+    MemTable* memtable;
+    std::vector<MemTable*> imm_memtables;
+    std::vector<int> l0_sstables;
+    std::unordered_map<int, std::shared_ptr<SsTable>> sstables;
 };
 
 // The storage interface of the LSM tree
@@ -31,9 +44,13 @@ public:
     void delete_key(const std::string& key);
     
     std::unique_ptr<FusedIterator> scan();
+    std::unique_ptr<FusedIterator> scan(const Bound& lower, const Bound& upper);
 
     // Force freeze the current memtable to an immutable memtable
     void force_freeze_memtable();
+
+    // Test helper to add SSTs into L0
+    void add_l0_sstable(int sst_id, std::shared_ptr<SsTable> sst);
     
     // Test accessors
     int get_imm_memtables_count() const;
@@ -58,6 +75,8 @@ private:
     
     // Helper to check if memtable should be frozen
     bool try_freeze(int estimated_size);
+
+    LsmStorageSnapshot snapshot_state();
 };
 
 // Thin wrapper for LsmStorageInner and the user interface
@@ -68,6 +87,7 @@ public:
     
 
     std::unique_ptr<FusedIterator> scan();
+    std::unique_ptr<FusedIterator> scan(const Bound& lower, const Bound& upper);
     
     std::optional<std::string> get(const std::string& key);
     void put(const std::string& key, const std::string& value);

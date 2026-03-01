@@ -25,8 +25,8 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 # ---- Auto-discover source files ----
-file(GLOB_RECURSE LSM_SOURCES "src/*.cpp")
-file(GLOB_RECURSE LSM_HEADERS "src/include/*.hpp")
+file(GLOB_RECURSE LSM_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
+file(GLOB_RECURSE LSM_HEADERS CONFIGURE_DEPENDS "src/include/*.hpp")
 
 # ---- Main LSM Library ----
 add_library(lsm ${LSM_SOURCES} ${LSM_HEADERS})

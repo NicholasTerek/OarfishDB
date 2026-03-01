@@ -1,5 +1,6 @@
 #pragma once
 #include "StorageIterator.hpp"
+#include "bound.hpp"
 #include "merge_iterator.hpp"
 #include <memory>
 #include <string>
@@ -9,8 +10,10 @@
  */
 class LsmIterator : public StorageIterator {
 public:
-    explicit LsmIterator(std::unique_ptr<MergeIterator> inner);
+    explicit LsmIterator(std::unique_ptr<StorageIterator> inner, Bound end_bound);
     static std::unique_ptr<LsmIterator> create(std::unique_ptr<MergeIterator> merge_iter);
+    static std::unique_ptr<LsmIterator> create_with_end(std::unique_ptr<StorageIterator> inner,
+                                                        Bound end_bound);
 
     std::string key() override;
     std::string value() override;
@@ -18,8 +21,11 @@ public:
     void next() override;
 
 private:
-    std::unique_ptr<MergeIterator> LsmIteratorInner_;
+    std::unique_ptr<StorageIterator> LsmIteratorInner_;
+    Bound end_bound_;
+    bool ended_;
     void skip_deleted_keys();
+    bool exceeds_end_bound() const;
 };
 
 class FusedIterator : StorageIterator {

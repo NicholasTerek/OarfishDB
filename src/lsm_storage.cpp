@@ -1,6 +1,8 @@
 #include "include/lsm_storage.hpp"
 #include "include/iterators/lsm_iterator.hpp"
 #include "include/iterators/merge_iterator.hpp"
+#include "include/iterators/sstable_iterator.hpp"
+#include "include/iterators/two_merge_iterator.hpp"
 #include <memory>
 #include <vector>
 
@@ -23,7 +25,7 @@ LsmStorageState LsmStorageState::create() {
 
 LsmStorageInner::LsmStorageInner() {
     // state_ is initialized automatically by its constructor
-    target_sst_size_ = 2 * 1024 * 1024; // 2MB default (like Rust)
+    target_sst_size_ = 2 * 1024 * 1024;
     next_sst_id_ = 1;
 }
 
@@ -32,33 +34,59 @@ LsmStorageInner::~LsmStorageInner() {
 }
 
 std::optional<std::string> LsmStorageInner::get(const std::string& key) {
-    // Use lock to ensure consistent state while reading
-    std::lock_guard<std::mutex> lock(state_lock_);
-    
+    LsmStorageSnapshot snapshot = snapshot_state();
+
     // Search on the current memtable first (newest data)
-    std::optional<std::string> result = state_.memtable->get(key);
-    
+    std::optional<std::string> result = snapshot.memtable->get(key);
+
     if (result.has_value()) {
-        // Check for tombstone (empty value means deleted)
         if (result.value().empty()) {
-            return std::nullopt; // Found tombstone
+            return std::nullopt;
         }
         return result.value();
     }
-    
+
     // Search on immutable memtables from newest to oldest
-    // (index 0 is newest since we insert at the beginning)
-    for (MemTable* memtable : state_.imm_memtables) {
-        std::optional<std::string> result = memtable->get(key);
-        if (result.has_value()) {
-            if (result.value().empty()) {
-                return std::nullopt; // Found tombstone
+    for (MemTable* memtable : snapshot.imm_memtables) {
+        std::optional<std::string> imm_result = memtable->get(key);
+        if (imm_result.has_value()) {
+            if (imm_result.value().empty()) {
+                return std::nullopt;
             }
-            return result.value();
+            return imm_result.value();
         }
     }
-    
-    return std::nullopt;
+
+    if (snapshot.l0_sstables.empty()) {
+        return std::nullopt;
+    }
+
+    std::vector<std::unique_ptr<StorageIterator>> sst_iters;
+    sst_iters.reserve(snapshot.l0_sstables.size());
+    for (int sst_id : snapshot.l0_sstables) {
+        auto it = snapshot.sstables.find(sst_id);
+        if (it == snapshot.sstables.end()) {
+            continue;
+        }
+        auto iter = SsTableIterator::create_and_seek_to_key(it->second, key);
+        sst_iters.push_back(std::move(iter));
+    }
+
+    if (sst_iters.empty()) {
+        return std::nullopt;
+    }
+
+    auto merge_iter = MergeIterator::create(std::move(sst_iters));
+    if (!merge_iter->is_valid()) {
+        return std::nullopt;
+    }
+    if (merge_iter->key() != key) {
+        return std::nullopt;
+    }
+    if (merge_iter->value().empty()) {
+        return std::nullopt;
+    }
+    return merge_iter->value();
 }
 
 void LsmStorageInner::put(const std::string& key, const std::string& value) {
@@ -93,22 +121,50 @@ void LsmStorageInner::force_freeze_memtable() {
     state_.memtable = new MemTable();
 }
 
+void LsmStorageInner::add_l0_sstable(int sst_id, std::shared_ptr<SsTable> sst) {
+    std::lock_guard<std::mutex> lock(state_lock_);
+    state_.l0_sstables.push_back(sst_id);
+    state_.sstables[sst_id] = std::move(sst);
+}
+
 int LsmStorageInner::next_sst_id() {
     return next_sst_id_++;
 }
 
 std::unique_ptr<FusedIterator> LsmStorageInner::scan() {
-    std::lock_guard<std::mutex> lock(state_lock_);
-    
-    std::vector<std::unique_ptr<StorageIterator>> iters;
-    iters.push_back(state_.memtable->begin_ptr());
-    
-    for (size_t i = 0; i < state_.imm_memtables.size(); i++) {
-        iters.push_back(state_.imm_memtables[i]->begin_ptr());
+    return scan(Bound::unbounded(), Bound::unbounded());
+}
+
+std::unique_ptr<FusedIterator> LsmStorageInner::scan(const Bound& lower, const Bound& upper) {
+    LsmStorageSnapshot snapshot = snapshot_state();
+
+    std::vector<std::unique_ptr<StorageIterator>> mem_iters;
+    mem_iters.push_back(snapshot.memtable->scan_ptr(lower.key, upper.key));
+    for (size_t i = 0; i < snapshot.imm_memtables.size(); i++) {
+        mem_iters.push_back(snapshot.imm_memtables[i]->scan_ptr(lower.key, upper.key));
     }
-    
-    auto merge_iter = MergeIterator::create(std::move(iters));
-    auto lsm_iter = LsmIterator::create(std::move(merge_iter));
+    auto mem_merge = MergeIterator::create(std::move(mem_iters));
+
+    std::vector<std::unique_ptr<StorageIterator>> sst_iters;
+    for (int sst_id : snapshot.l0_sstables) {
+        auto it = snapshot.sstables.find(sst_id);
+        if (it == snapshot.sstables.end()) {
+            continue;
+        }
+        auto iter = SsTableIterator::create_and_seek_to_key(it->second, lower.key);
+        sst_iters.push_back(std::move(iter));
+    }
+    auto sst_merge = MergeIterator::create(std::move(sst_iters));
+
+    auto two_merge = TwoMergeIterator::create(std::move(mem_merge), std::move(sst_merge));
+    auto lsm_iter = LsmIterator::create_with_end(std::move(two_merge), upper);
+
+    if (lower.type == BoundType::Excluded) {
+        while (lsm_iter->is_valid() && lsm_iter->key() == lower.key) {
+            lsm_iter->next();
+        }
+    }
+
     return FusedIterator::create(std::move(lsm_iter));
 }
 
@@ -117,16 +173,17 @@ std::unique_ptr<FusedIterator> Lsm::scan() {
     return inner_->scan();
 }
 
+std::unique_ptr<FusedIterator> Lsm::scan(const Bound& lower, const Bound& upper) {
+    return inner_->scan(lower, upper);
+}
+
 bool LsmStorageInner::try_freeze(int estimated_size) {
     if (estimated_size >= target_sst_size_) {
         std::lock_guard<std::mutex> lock(state_lock_);
         
-        // Double-check after acquiring lock (race condition prevention)
         if (state_.memtable->Size() >= target_sst_size_) {
             // Inline the freeze logic to avoid deadlock
             MemTable* old_memtable = state_.memtable;
-            
-            // Add to immutable memtables (latest first)
             state_.imm_memtables.insert(state_.imm_memtables.begin(), old_memtable);
             
             // Create new current memtable
@@ -135,6 +192,16 @@ bool LsmStorageInner::try_freeze(int estimated_size) {
         }
     }
     return false;
+}
+
+LsmStorageSnapshot LsmStorageInner::snapshot_state() {
+    std::lock_guard<std::mutex> lock(state_lock_);
+    LsmStorageSnapshot snapshot;
+    snapshot.memtable = state_.memtable;
+    snapshot.imm_memtables = state_.imm_memtables;
+    snapshot.l0_sstables = state_.l0_sstables;
+    snapshot.sstables = state_.sstables;
+    return snapshot;
 }
 
 // Test accessors
