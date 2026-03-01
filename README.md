@@ -5,9 +5,12 @@ Simple Log-Structured Merge tree with custom SkipList implementation in C++17.
 ## Build & Test
 
 ```bash
-mkdir build && cd build
-cmake .. && make
-./lsm_storage_test  # or: ctest
+cmake -S . -B build
+cmake --build build -j"$(nproc)"
+```
+
+```bash
+ctest --test-dir build --output-on-failure
 ```
 
 ## Features

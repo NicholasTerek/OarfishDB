@@ -43,3 +43,8 @@ compile_commands.json
 .vscode
 .cache
 /build
+
+
+/build/
+/build-*/
+/cmake-build-*/
