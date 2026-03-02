@@ -2,7 +2,10 @@
 
 <img width="814" height="200" alt="image" src="https://github.com/user-attachments/assets/1960f46f-940a-4b4c-a70f-72114ba8b34b" />
 
-Simple Log-Structured Merge tree with custom SkipList implementation in C++17.
+<p>&nbsp;</p>
+
+> [!WARNING]
+> OarfishDB is built for educational purposes only. Do **not** use in production environments.
 
 ## Build & Test
 
