@@ -1,5 +1,7 @@
 # LSM Tree in C++
 
+<img width="814" height="200" alt="image" src="https://github.com/user-attachments/assets/1960f46f-940a-4b4c-a70f-72114ba8b34b" />
+
 Simple Log-Structured Merge tree with custom SkipList implementation in C++17.
 
 ## Build & Test
