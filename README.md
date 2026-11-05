@@ -25,13 +25,6 @@ ctest --test-dir build --output-on-failure
 ```
 
 
-## Features
-
-- Custom **SkipList** data structure
-- **Multi-memtable** LSM storage with automatic freezing
-- **Thread-safe** operations with proper locking
-- **Comprehensive tests** (24 tests across 3 suites)
-
 ## Querying OarfishDB
 
 ```cpp
@@ -72,3 +65,10 @@ SELECT value FROM kv WHERE key = 'foo';
 SELECT * FROM kv WHERE value = 'bar';
 SELECT * FROM kv LIMIT 10;
 ```
+
+## Features
+
+- Custom **SkipList** data structure
+- **Multi-memtable** LSM storage with automatic freezing
+- **Thread-safe** operations with proper locking
+- **Comprehensive tests** (24 tests across 3 suites)
