@@ -31,3 +31,44 @@ ctest --test-dir build --output-on-failure
 - **Multi-memtable** LSM storage with automatic freezing
 - **Thread-safe** operations with proper locking
 - **Comprehensive tests** (24 tests across 3 suites)
+
+## Querying OarfishDB
+
+```cpp
+#include "src/include/planner/database.hpp"
+
+#include <iostream>
+
+int main() {
+    Lsm storage;
+
+    storage.put("foo", "bar");
+    storage.put("baz", "qux");
+
+    oarfish::Database db(storage, {2});
+
+    auto result = db.query(
+        "SELECT key, value FROM kv WHERE key = 'foo'"
+    );
+
+    for (const auto& row : result.rows) {
+        std::cout << row[0] << ": " << row[1] << '\n';
+    }
+}
+```
+
+Output:
+
+```text
+foo: bar
+```
+
+Supported queries include:
+
+```sql
+SELECT * FROM kv;
+SELECT key, value FROM kv;
+SELECT value FROM kv WHERE key = 'foo';
+SELECT * FROM kv WHERE value = 'bar';
+SELECT * FROM kv LIMIT 10;
+```
