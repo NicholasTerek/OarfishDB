@@ -15,6 +15,9 @@ target_include_directories(lsm PUBLIC
 )
 target_compile_options(lsm PRIVATE $<$<CONFIG:Debug>:-O0 -g3 -fno-omit-frame-pointer>)
 
+add_executable(oarfishdb cli/main.cpp)
+target_link_libraries(oarfishdb PRIVATE lsm)
+
 if(BUILD_TESTING)
   include(FetchContent)
   FetchContent_Declare(

@@ -25,6 +25,25 @@ ctest --test-dir build --output-on-failure
 ```
 
 
+## Terminal shell
+
+```bash
+cmake -S . -B build -DBUILD_TESTING=OFF
+cmake --build build --target oarfishdb
+./build/oarfishdb --demo
+```
+
+The demo starts with three rows in `kv`. Run without `--demo` for an empty
+session. Changes last for the current session. Enter one command per line:
+
+```text
+SELECT * FROM kv;
+.explain SELECT value FROM kv WHERE key = 'storage';
+.put storage LSM tree
+SELECT value FROM kv WHERE key = 'storage';
+.quit
+```
+
 ## Querying OarfishDB
 
 ```cpp
